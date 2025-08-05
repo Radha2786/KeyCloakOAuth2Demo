@@ -25,7 +25,7 @@ curl -X GET http://localhost:9876/api/health
 curl -X GET http://localhost:9876/api/test/public
 ```
 
-### 3. Register a New User
+### 3. Register a New User with Role
 ```bash
 curl -X POST http://localhost:9876/api/register \
   -H "Content-Type: application/json" \
@@ -34,7 +34,22 @@ curl -X POST http://localhost:9876/api/register \
     "email": "testuser1@example.com",
     "firstName": "Test",
     "lastName": "User",
-    "password": "password123"
+    "password": "password123",
+    "role": "user"
+  }'
+```
+
+### 3.1. Register an Employee User
+```bash
+curl -X POST http://localhost:9876/api/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "employee1",
+    "email": "employee1@company.com",
+    "firstName": "John",
+    "lastName": "Employee",
+    "password": "password123",
+    "role": "employee"
   }'
 ```
 
@@ -111,7 +126,7 @@ $registerData = @{
     password = "password123"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:9876/api/register" `
+Invoke-RestMethod -Uri "http://localhost:9876/api/register"
   -Method POST `
   -Body $registerData `
   -ContentType "application/json"

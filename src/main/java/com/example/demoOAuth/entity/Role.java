@@ -10,31 +10,26 @@ import java.time.LocalDateTime;
 import java.util.Set;
 
 @Entity
-@Table(name = "users")
+@Table(name = "roles")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class User {
+public class Role {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
     @Column(unique = true, nullable = false, length = 50)
-    private String username;
+    private String name;
     
-    @Column(unique = true, nullable = false)
-    private String email;
+    @Column(length = 255)
+    private String description;
     
-    @Column(name = "first_name", nullable = false, length = 50)
-    private String firstName;
-    
-    @Column(name = "last_name", nullable = false, length = 50)
-    private String lastName;
-    
-    @Column(name = "keycloak_user_id", unique = true)
-    private String keycloakUserId;
+    @Column(name = "is_self_assignable")
+    @Builder.Default
+    private Boolean isSelfAssignable = false;
     
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -42,11 +37,7 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
     
-    @Column(name = "enabled")
-    @Builder.Default
-    private Boolean enabled = true;
-    
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "role", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Set<UserRole> userRoles;
     
     @PrePersist
@@ -59,4 +50,9 @@ public class User {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+    
+    // Predefined role names as constants
+    public static final String USER = "user";
+    public static final String EMPLOYEE = "employee";
+    public static final String ADMIN = "admin";
 }

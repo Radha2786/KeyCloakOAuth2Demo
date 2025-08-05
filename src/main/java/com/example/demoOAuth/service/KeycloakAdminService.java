@@ -170,4 +170,122 @@ public class KeycloakAdminService {
             return false;
         }
     }
+    
+    /**
+     * Assign role to user in Keycloak
+     */
+    public boolean assignRoleToKeycloakUser(String keycloakUserId, String roleName) {
+        try {
+            String accessToken = getAdminAccessToken();
+            if (accessToken == null) {
+                log.error("Cannot assign role: Failed to get admin access token");
+                return false;
+            }
+            
+            // First, get the role representation
+            String getRoleUrl = serverUrl + "/admin/realms/" + realm + "/roles/" + roleName;
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessToken);
+            
+            HttpEntity<String> getRoleRequest = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> roleResponse = restTemplate.exchange(
+                getRoleUrl,
+                HttpMethod.GET,
+                getRoleRequest,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (roleResponse.getStatusCode() != HttpStatus.OK || roleResponse.getBody() == null) {
+                log.error("Role {} not found in Keycloak", roleName);
+                return false;
+            }
+            
+            // Assign role to user
+            String assignRoleUrl = serverUrl + "/admin/realms/" + realm + "/users/" + keycloakUserId + "/role-mappings/realm";
+            
+            HttpHeaders assignHeaders = new HttpHeaders();
+            assignHeaders.setContentType(MediaType.APPLICATION_JSON);
+            assignHeaders.setBearerAuth(accessToken);
+            
+            List<Map<String, Object>> rolesToAssign = List.of(roleResponse.getBody());
+            
+            HttpEntity<List<Map<String, Object>>> assignRequest = new HttpEntity<>(rolesToAssign, assignHeaders);
+            
+            ResponseEntity<String> assignResponse = restTemplate.postForEntity(assignRoleUrl, assignRequest, String.class);
+            
+            if (assignResponse.getStatusCode() == HttpStatus.NO_CONTENT) {
+                log.info("Successfully assigned role {} to user {} in Keycloak", roleName, keycloakUserId);
+                return true;
+            } else {
+                log.error("Failed to assign role {} to user {} in Keycloak. Status: {}", 
+                         roleName, keycloakUserId, assignResponse.getStatusCode());
+                return false;
+            }
+            
+        } catch (Exception e) {
+            log.error("Error assigning role {} to user {} in Keycloak", roleName, keycloakUserId, e);
+            return false;
+        }
+    }
+    
+    /**
+     * Remove role from user in Keycloak
+     */
+    public boolean removeRoleFromKeycloakUser(String keycloakUserId, String roleName) {
+        try {
+            String accessToken = getAdminAccessToken();
+            if (accessToken == null) {
+                log.error("Cannot remove role: Failed to get admin access token");
+                return false;
+            }
+            
+            // First, get the role representation
+            String getRoleUrl = serverUrl + "/admin/realms/" + realm + "/roles/" + roleName;
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessToken);
+            
+            HttpEntity<String> getRoleRequest = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> roleResponse = restTemplate.exchange(
+                getRoleUrl,
+                HttpMethod.GET,
+                getRoleRequest,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (roleResponse.getStatusCode() != HttpStatus.OK || roleResponse.getBody() == null) {
+                log.error("Role {} not found in Keycloak", roleName);
+                return false;
+            }
+            
+            // Remove role from user
+            String removeRoleUrl = serverUrl + "/admin/realms/" + realm + "/users/" + keycloakUserId + "/role-mappings/realm";
+            
+            HttpHeaders removeHeaders = new HttpHeaders();
+            removeHeaders.setContentType(MediaType.APPLICATION_JSON);
+            removeHeaders.setBearerAuth(accessToken);
+            
+            List<Map<String, Object>> rolesToRemove = List.of(roleResponse.getBody());
+            
+            HttpEntity<List<Map<String, Object>>> removeRequest = new HttpEntity<>(rolesToRemove, removeHeaders);
+            
+            ResponseEntity<String> removeResponse = restTemplate.exchange(removeRoleUrl, HttpMethod.DELETE, removeRequest, String.class);
+            
+            if (removeResponse.getStatusCode() == HttpStatus.NO_CONTENT) {
+                log.info("Successfully removed role {} from user {} in Keycloak", roleName, keycloakUserId);
+                return true;
+            } else {
+                log.error("Failed to remove role {} from user {} in Keycloak. Status: {}", 
+                         roleName, keycloakUserId, removeResponse.getStatusCode());
+                return false;
+            }
+            
+        } catch (Exception e) {
+            log.error("Error removing role {} from user {} in Keycloak", roleName, keycloakUserId, e);
+            return false;
+        }
+    }
 }

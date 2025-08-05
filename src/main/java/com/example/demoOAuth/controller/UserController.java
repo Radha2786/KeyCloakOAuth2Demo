@@ -13,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -93,6 +94,7 @@ public class UserController {
                     
                     if (userOpt.isPresent()) {
                         User user = userOpt.get();
+                        List<String> userRoles = userService.getUserRoles(user);
                         
                         // Create a safe response without sensitive data
                         Map<String, Object> userProfile = Map.of(
@@ -102,6 +104,7 @@ public class UserController {
                             "firstName", user.getFirstName(),
                             "lastName", user.getLastName(),
                             "enabled", user.getEnabled(),
+                            "roles", userRoles,
                             "createdAt", user.getCreatedAt()
                         );
                         

@@ -5,12 +5,14 @@ import com.example.demoOAuth.dto.LoginResponse;
 import com.example.demoOAuth.dto.UserRegistrationRequest;
 import com.example.demoOAuth.dto.UserRegistrationResponse;
 import com.example.demoOAuth.entity.User;
+import com.example.demoOAuth.entity.UserRole;
 import com.example.demoOAuth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -21,6 +23,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final KeycloakAdminService keycloakAdminService;
     private final KeycloakTokenService keycloakTokenService;
+    private final RoleService roleService;
     
     /**
      * Register a new user in both local database and Keycloak
@@ -28,6 +31,9 @@ public class UserService {
     @Transactional
     public UserRegistrationResponse registerUser(UserRegistrationRequest request) {
         try {
+            // Validate role selection first
+            roleService.validateRoleForRegistration(request.getRole());
+            
             // Check if user already exists in local database
             if (userRepository.existsByUsername(request.getUsername())) {
                 log.warn("Registration failed: Username {} already exists in local database", request.getUsername());
@@ -59,6 +65,14 @@ public class UserService {
                 return UserRegistrationResponse.error("Failed to create user in authentication system");
             }
             
+            // Assign role in Keycloak
+            boolean roleAssigned = keycloakAdminService.assignRoleToKeycloakUser(keycloakUserId, request.getRole());
+            if (!roleAssigned) {
+                log.error("Failed to assign role {} to user {} in Keycloak", request.getRole(), keycloakUserId);
+                // Note: User is created in Keycloak but role assignment failed
+                // In production, you might want to handle this differently
+            }
+            
             // Create user in local database
             User user = User.builder()
                 .username(request.getUsername())
@@ -71,8 +85,16 @@ public class UserService {
             
             User savedUser = userRepository.save(user);
             
-            log.info("User registered successfully: username={}, id={}, keycloakId={}", 
-                    savedUser.getUsername(), savedUser.getId(), keycloakUserId);
+            // Assign role in local database
+            roleService.assignRoleToUser(
+                savedUser, 
+                request.getRole(), 
+                "SYSTEM", 
+                UserRole.AssignmentMethod.SELF_REGISTRATION
+            );
+            
+            log.info("User registered successfully: username={}, id={}, keycloakId={}, role={}", 
+                    savedUser.getUsername(), savedUser.getId(), keycloakUserId, request.getRole());
             
             return UserRegistrationResponse.success(savedUser.getId().toString());
             
@@ -143,5 +165,12 @@ public class UserService {
      */
     public Optional<User> getUserByKeycloakId(String keycloakUserId) {
         return userRepository.findByKeycloakUserId(keycloakUserId);
+    }
+    
+    /**
+     * Get user's roles from database
+     */
+    public List<String> getUserRoles(User user) {
+        return roleService.getUserActiveRoles(user);
     }
 }
