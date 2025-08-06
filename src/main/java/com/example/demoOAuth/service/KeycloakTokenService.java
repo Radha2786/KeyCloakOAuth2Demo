@@ -17,16 +17,16 @@ import java.util.Map;
 @Slf4j
 public class KeycloakTokenService {
     
-    @Value("${keycloak.admin.server-url}")
+    @Value("${keycloak.token.server-url}")
     private String serverUrl;
     
-    @Value("${keycloak.admin.realm}")
+    @Value("${keycloak.token.realm}")
     private String realm;
     
-    @Value("${keycloak.admin.client-id}")
+    @Value("${keycloak.token.client-id}")
     private String clientId;
     
-    @Value("${keycloak.admin.client-secret}")
+    @Value("${keycloak.token.client-secret}")
     private String clientSecret;
     
     private final RestTemplate restTemplate;

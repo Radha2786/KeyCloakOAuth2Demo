@@ -2,6 +2,7 @@ package com.example.demoOAuth.controller;
 
 import com.example.demoOAuth.dto.*;
 import com.example.demoOAuth.entity.User;
+import com.example.demoOAuth.helper.Helper;
 import com.example.demoOAuth.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -149,7 +151,48 @@ public class UserController {
                 .body(Map.of("error", "Internal server error"));
         }
     }
-    
+
+    /**
+     * Bulk register users via file upload (CSV or Excel)
+     */
+    @PostMapping(value = "/admin/bulk-register-file", consumes = "multipart/form-data")
+    @PreAuthorize("hasRole('admin')")
+    public ResponseEntity<BulkUserRegistrationResponse> bulkRegisterUsersFromFile(
+        @RequestParam("file") MultipartFile file) {
+        
+        try {
+            if (file == null || file.isEmpty()) {
+                return ResponseEntity.badRequest().body(
+                    BulkUserRegistrationResponse.error("File is required")
+                );
+            }
+            
+            if (!Helper.checkFileFormat(file)) {
+                return ResponseEntity.badRequest().body(
+                    BulkUserRegistrationResponse.error("Invalid file format. Please upload Excel (.xlsx, .xls) or CSV (.csv) files only.")
+                );
+            }
+            
+            log.info("Processing file: {}", file.getOriginalFilename());
+            
+            BulkUserRegistrationResponse response = userService.save(file);
+            
+            if (response.getFailedRegistrations() == 0) {
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            } else if (response.getSuccessfulRegistrations() > 0) {
+                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT).body(response);
+            } else {
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+        } catch (Exception e) {
+            log.error("Error processing file upload", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                BulkUserRegistrationResponse.error("File processing failed: " + e.getMessage())
+            );
+        }
+    }
+
     /**
      * Health check endpoint
      */
@@ -161,4 +204,5 @@ public class UserController {
             "timestamp", java.time.Instant.now().toString()
         ));
     }
+
 }

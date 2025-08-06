@@ -1,17 +1,19 @@
 package com.example.demoOAuth.service;
 
-import com.example.demoOAuth.dto.LoginRequest;
-import com.example.demoOAuth.dto.LoginResponse;
-import com.example.demoOAuth.dto.UserRegistrationRequest;
-import com.example.demoOAuth.dto.UserRegistrationResponse;
+import com.example.demoOAuth.dto.*;
 import com.example.demoOAuth.entity.User;
 import com.example.demoOAuth.entity.UserRole;
+import com.example.demoOAuth.helper.Helper;
 import com.example.demoOAuth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -172,5 +174,134 @@ public class UserService {
      */
     public List<String> getUserRoles(User user) {
         return roleService.getUserActiveRoles(user);
+    }
+    
+    /**
+     * Bulk register users from file
+     */
+    @Transactional
+    public BulkUserRegistrationResponse bulkRegisterUsers(BulkUserRegistrationRequest request) {
+        List<UserRegistrationResult> results = new ArrayList<>();
+        List<String> globalErrors = new ArrayList<>();
+        
+        int successful = 0;
+        int failed = 0;
+        
+        for (UserRegistrationRequest userRequest : request.getUsers()) {
+            try {
+                // Validate each user
+                validateUserForBulkRegistration(userRequest);
+                
+                if (!request.getDryRun()) {
+                    UserRegistrationResponse response = registerUser(userRequest);
+                    
+                    if (response.isSuccess()) {
+                        results.add(UserRegistrationResult.builder()
+                            .username(userRequest.getUsername())
+                            .email(userRequest.getEmail())
+                            .success(true)
+                            .message("User registered successfully")
+                            .userId(response.getUserId())
+                            .build());
+                        successful++;
+                    } else {
+                        if (request.getSkipDuplicates() && response.getMessage().contains("already exists")) {
+                            results.add(UserRegistrationResult.builder()
+                                .username(userRequest.getUsername())
+                                .email(userRequest.getEmail())
+                                .success(true)
+                                .message("User already exists - skipped")
+                                .build());
+                            successful++;
+                        } else {
+                            results.add(UserRegistrationResult.builder()
+                                .username(userRequest.getUsername())
+                                .email(userRequest.getEmail())
+                                .success(false)
+                                .message(response.getMessage())
+                                .build());
+                            failed++;
+                        }
+                    }
+                } else {
+                    // Dry run - just validate
+                    results.add(UserRegistrationResult.builder()
+                        .username(userRequest.getUsername())
+                        .email(userRequest.getEmail())
+                        .success(true)
+                        .message("Validation passed (dry run)")
+                        .build());
+                }
+                
+            } catch (Exception e) {
+                results.add(UserRegistrationResult.builder()
+                    .username(userRequest.getUsername())
+                    .email(userRequest.getEmail())
+                    .success(false)
+                    .message("Registration failed: " + e.getMessage())
+                    .build());
+                failed++;
+            }
+        }
+        
+        return BulkUserRegistrationResponse.builder()
+            .totalRequested(request.getUsers().size())
+            .successfulRegistrations(successful)
+            .failedRegistrations(failed)
+            .results(results)
+            .errors(globalErrors)
+            .build();
+    }
+    
+    /**
+     * Parse user file and create bulk registration request
+     */
+    public BulkUserRegistrationRequest parseUserFile(MultipartFile file) throws IOException {
+        List<UserRegistrationRequest> users = new ArrayList<>();
+        
+        try (InputStream inputStream = file.getInputStream()) {
+            if (Helper.checkExcelFormat(file)) {
+                users = Helper.convertExcelToListOfUserRegistrationRequest(inputStream);
+            } else if (Helper.checkCSVFormat(file)) {
+                users = Helper.convertCSVToListOfUserRegistrationRequest(inputStream);
+            } else {
+                throw new IllegalArgumentException("Unsupported file format. Please use .xlsx or .csv");
+            }
+        }
+        
+        return BulkUserRegistrationRequest.builder()
+            .users(users)
+            .skipDuplicates(true)
+            .dryRun(false)
+            .build();
+    }
+    
+    /**
+     * Validate user for bulk registration
+     */
+    private void validateUserForBulkRegistration(UserRegistrationRequest userRequest) {
+        // Use existing role validation
+        roleService.validateRoleForRegistration(userRequest.getRole());
+        
+        // Additional validations can be added here
+        if (userRequest.getUsername() == null || userRequest.getUsername().trim().isEmpty()) {
+            throw new IllegalArgumentException("Username cannot be empty");
+        }
+        
+        if (userRequest.getEmail() == null || userRequest.getEmail().trim().isEmpty()) {
+            throw new IllegalArgumentException("Email cannot be empty");
+        }
+        
+        if (userRequest.getPassword() == null || userRequest.getPassword().length() < 6) {
+            throw new IllegalArgumentException("Password must be at least 6 characters");
+        }
+    }
+    
+    /**
+     * Save users from file (existing method used by upload endpoint)
+     */
+    public BulkUserRegistrationResponse save(MultipartFile file) throws IOException {
+        BulkUserRegistrationRequest request = parseUserFile(file);
+        return bulkRegisterUsers(request);
     }
 }

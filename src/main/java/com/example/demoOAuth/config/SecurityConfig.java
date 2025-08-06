@@ -15,6 +15,10 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.nimbusds.jwt.JWT;
+
+import jakarta.persistence.Converts;
+
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +45,7 @@ public class SecurityConfig {
                 
                 // Admin endpoints - require admin role
                 .requestMatchers("/api/admin/**").hasRole("admin")
+                
                 
                 // All other requests require authentication
                 .anyRequest().authenticated()
@@ -78,10 +83,13 @@ public class SecurityConfig {
         
         // Set principal name to preferred_username
         converter.setPrincipalClaimName("preferred_username");
+        // principalClaimName tells Spring Security which claim (field) in the JWT token should be treated 
+        // as the username (or main identity) of the logged-in user.
         
         return converter;
     }
     
+    // Gets roles from realm_access.roles in the JWT
     @SuppressWarnings("unchecked")
     private Collection<GrantedAuthority> extractRealmRoles(org.springframework.security.oauth2.jwt.Jwt jwt) {
         Map<String, Object> realmAccess = jwt.getClaimAsMap("realm_access");
@@ -93,7 +101,21 @@ public class SecurityConfig {
         }
         return List.of();
     }
-    
+    // how this is working 
+    // Gets roles from realm_access.roles in the JWT
+    // Converts them to ROLE_<role> format for Spring
+//     example : "realm_access": {
+//   "roles": ["user", "admin"]
+// }
+// → Becomes: ROLE_user, ROLE_admin
+
+
+
+// "resource_access": {
+//   "myclient": {
+//     "roles": ["editor", "manager"]
+//   }
+// }
     @SuppressWarnings("unchecked")
     private Collection<GrantedAuthority> extractResourceRoles(org.springframework.security.oauth2.jwt.Jwt jwt) {
         Map<String, Object> resourceAccess = jwt.getClaimAsMap("resource_access");
@@ -114,6 +136,10 @@ public class SecurityConfig {
         return List.of();
     }
     
+    // Gets the space-separated scope claim and converts each into SCOPE_<scope>.
+    // Example:
+    // "scope": "read write"
+    // Becomes: SCOPE_read, SCOPE_write
     private Collection<GrantedAuthority> extractScopes(org.springframework.security.oauth2.jwt.Jwt jwt) {
         String scopes = jwt.getClaimAsString("scope");
         if (scopes != null && !scopes.trim().isEmpty()) {

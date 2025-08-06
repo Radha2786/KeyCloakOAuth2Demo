@@ -46,7 +46,8 @@ public class KeycloakAdminService {
      */
     public String getAdminAccessToken() {
         try {
-            String tokenUrl = serverUrl + "/realms/master/protocol/openid-connect/token";
+            String tokenUrl = serverUrl + "/realms/" + realm + "/protocol/openid-connect/token";
+            log.info("Getting admin access token from: {}", tokenUrl);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -57,6 +58,8 @@ public class KeycloakAdminService {
             body.add("username", adminUsername);
             body.add("password", adminPassword);
             
+            log.info("Using credentials: username={}, client_id=admin-cli", adminUsername);
+            
             HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
             
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
@@ -66,11 +69,16 @@ public class KeycloakAdminService {
                 new ParameterizedTypeReference<Map<String, Object>>() {}
             );
             
+            log.info("Token response: Status={}", response.getStatusCode());
+            
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                return (String) response.getBody().get("access_token");
+                String accessToken = (String) response.getBody().get("access_token");
+                log.info("Successfully obtained admin access token");
+                return accessToken;
             }
             
-            log.error("Failed to get admin access token. Status: {}", response.getStatusCode());
+            log.error("Failed to get admin access token. Status: {}, Body: {}", 
+                     response.getStatusCode(), response.getBody());
             return null;
             
         } catch (Exception e) {
@@ -85,13 +93,19 @@ public class KeycloakAdminService {
     public String createKeycloakUser(String username, String email, String firstName, 
                                    String lastName, String password) {
         try {
+            log.info("Attempting to create user: username={}, email={}, firstName={}, lastName={}", 
+                    username, email, firstName, lastName);
+            
             String accessToken = getAdminAccessToken();
             if (accessToken == null) {
                 log.error("Cannot create user: Failed to get admin access token");
                 return null;
             }
             
+            log.info("Got admin access token successfully");
+            
             String createUserUrl = serverUrl + "/admin/realms/" + realm + "/users";
+            log.info("Creating user at URL: {}", createUserUrl);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -113,9 +127,13 @@ public class KeycloakAdminService {
             credential.put("temporary", false);
             userRepresentation.put("credentials", List.of(credential));
             
+            log.info("User representation created: {}", userRepresentation);
+            
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(userRepresentation, headers);
             
             ResponseEntity<String> response = restTemplate.postForEntity(createUserUrl, request, String.class);
+            
+            log.info("Keycloak response: Status={}, Body={}", response.getStatusCode(), response.getBody());
             
             if (response.getStatusCode() == HttpStatus.CREATED) {
                 // Extract user ID from Location header
@@ -124,6 +142,9 @@ public class KeycloakAdminService {
                     String userId = locationHeader.substring(locationHeader.lastIndexOf("/") + 1);
                     log.info("User created successfully in Keycloak with ID: {}", userId);
                     return userId;
+                } else {
+                    log.error("User created but no Location header found in response");
+                    return null;
                 }
             }
             
@@ -132,7 +153,7 @@ public class KeycloakAdminService {
             return null;
             
         } catch (Exception e) {
-            log.error("Error creating user in Keycloak", e);
+            log.error("Error creating user in Keycloak for username: {}", username, e);
             return null;
         }
     }
